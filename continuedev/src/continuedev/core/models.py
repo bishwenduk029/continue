@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from ..libs.llm import LLM
 from ..libs.llm.anthropic import AnthropicLLM
 from ..libs.llm.ggml import GGML
+from ..libs.llm.llamacpp import LlamaCpp
 from ..libs.llm.maybe_proxy_openai import MaybeProxyOpenAI
 from ..libs.llm.ollama import Ollama
 from ..libs.llm.openai import OpenAI
@@ -35,6 +36,7 @@ MODEL_CLASSES = {
         AnthropicLLM,
         ReplicateLLM,
         Ollama,
+        LlamaCpp,
     ]
 }
 
@@ -46,6 +48,7 @@ MODEL_MODULE_NAMES = {
     "AnthropicLLM": "anthropic",
     "ReplicateLLM": "replicate",
     "Ollama": "ollama",
+    "LlamaCpp": "llamacpp",
 }
 
 
