@@ -1,50 +1,47 @@
 package com.github.bishwenduk029.continueintellijextension.listeners
 
-import com.github.bishwenduk029.continueintellijextension.`continue`.TextSelectionStrategy
+import com.github.bishwenduk029.continueintellijextension.`continue`.IdeProtocolClient
+import com.github.bishwenduk029.continueintellijextension.utils.Debouncer
 import com.intellij.openapi.editor.SelectionModel
 import com.intellij.openapi.editor.event.SelectionEvent
 import com.intellij.openapi.editor.event.SelectionListener
-import java.nio.file.Paths
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.vfs.VirtualFile
+import kotlinx.coroutines.CoroutineScope
 
-private const val HIGHLIGHTED_CODE_FILE_PATH =
-    "/Users/kundb/continue-intellij-extension/src/main/resources/continue_code/copiedCode.txt"
-
-class ContinuePluginSelectionListener(private val strategy: TextSelectionStrategy) : SelectionListener {
+class ContinuePluginSelectionListener(
+    private val ideProtocolClient: IdeProtocolClient,
+    private val coroutineScope: CoroutineScope
+) : SelectionListener {
+    private val debouncer = Debouncer(100L, coroutineScope)
     override fun selectionChanged(e: SelectionEvent) {
-        val editor = e.editor
-        val model: SelectionModel = editor.selectionModel
-
-        model.selectedText.let { selectedText ->
-            val document = editor.document
-            val startOffset = model.selectionStart
-            val endOffset = model.selectionEnd
-
-            val startLine = document.getLineNumber(startOffset)
-            val endLine = document.getLineNumber(endOffset)
-            val startCharacter = startOffset - document.getLineStartOffset(startLine)
-            val endCharacter = endOffset - document.getLineStartOffset(endLine)
-
-            val filepath = editor.document.toString()  // Replace with actual filepath if available
-            selectedText?.let { text ->
-                writeToFile(text)
-                strategy.handleTextSelection(
-                    text,
-                    filepath,
-                    startLine,
-                    startCharacter,
-                    endLine,
-                    endCharacter
-                )
-            }
-        }
+        debouncer.debounce { handleSelection(e) }
     }
 
-    private fun writeToFile(content: String) {
-        try {
-            Paths.get(HIGHLIGHTED_CODE_FILE_PATH).toFile().writeText(content)
-        } catch (ex: Exception) {
-            ex.printStackTrace()
-        }
+    private fun handleSelection(e: SelectionEvent) {
+        val editor = e.editor
+        val model: SelectionModel = editor.selectionModel
+        val selectedText = model.selectedText ?: return
+
+        val document = editor.document
+        val startOffset = model.selectionStart
+        val endOffset = model.selectionEnd
+        val startLine = document.getLineNumber(startOffset)
+        val endLine = document.getLineNumber(endOffset)
+        val startCharacter = startOffset - document.getLineStartOffset(startLine)
+        val endCharacter = endOffset - document.getLineStartOffset(endLine)
+
+        val virtualFile: VirtualFile? = FileDocumentManager.getInstance().getFile(document)
+        val filepath = virtualFile?.path ?: "Unknown path"
+
+        ideProtocolClient.onTextSelected(
+            selectedText,
+            filepath,
+            startLine,
+            startCharacter,
+            endLine,
+            endCharacter
+        )
     }
 }
 
