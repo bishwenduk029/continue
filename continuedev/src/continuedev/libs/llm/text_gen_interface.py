@@ -1,22 +1,49 @@
 import json
-from typing import Any, List, Optional
+from typing import Any, Callable, Dict, List, Union
 
 import websockets
+from pydantic import Field
 
 from ...core.main import ChatMessage
 from . import LLM
-from .prompts.edit import simplified_edit_prompt
+from .prompts.chat import llama2_template_messages
+from .prompts.edit import simplest_edit_prompt
 
 
 class TextGenUI(LLM):
+    """
+    TextGenUI is a comprehensive, open-source language model UI and local server. You can set it up with an OpenAI-compatible server plugin, but if for some reason that doesn't work, you can use this class like so:
+
+    ```python
+    from continuedev.src.continuedev.libs.llm.text_gen_interface import TextGenUI
+
+    config = ContinueConfig(
+        ...
+        models=Models(
+            default=TextGenUI(
+                model="<MODEL_NAME>",
+            )
+        )
+    )
+    ```
+    """
+
     model: str = "text-gen-ui"
-    server_url: str = "http://localhost:5000"
-    streaming_url: str = "http://localhost:5005"
-    verify_ssl: Optional[bool] = None
+    server_url: str = Field(
+        "http://localhost:5000", description="URL of your TextGenUI server"
+    )
+    streaming_url: str = Field(
+        "http://localhost:5005",
+        description="URL of your TextGenUI streaming server (separate from main server URL)",
+    )
 
     prompt_templates = {
-        "edit": simplified_edit_prompt,
+        "edit": simplest_edit_prompt,
     }
+
+    template_messages: Union[
+        Callable[[List[Dict[str, str]]], str], None
+    ] = llama2_template_messages
 
     class Config:
         arbitrary_types_allowed = True

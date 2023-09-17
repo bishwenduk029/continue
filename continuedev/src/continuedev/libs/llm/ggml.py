@@ -3,6 +3,7 @@ import ssl
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 import aiohttp
+from pydantic import Field
 
 from ...core.main import ChatMessage
 from ..llm import LLM
@@ -14,10 +15,36 @@ from .prompts.edit import simplified_edit_prompt
 
 
 class GGML(LLM):
-    server_url: str = "http://localhost:8000"
-    verify_ssl: Optional[bool] = None
-    ca_bundle_path: str = None
-    model: str = "ggml"
+    """
+    See our [5 minute quickstart](https://github.com/continuedev/ggml-server-example) to run any model locally with ggml. While these models don't yet perform as well, they are free, entirely private, and run offline.
+
+    Once the model is running on localhost:8000, change `~/.continue/config.py` to look like this:
+
+    ```python
+    from continuedev.src.continuedev.libs.llm.ggml import GGML
+
+    config = ContinueConfig(
+        ...
+        models=Models(
+            default=GGML(
+                max_context_length=2048,
+                server_url="http://localhost:8000")
+        )
+    )
+    ```
+    """
+
+    server_url: str = Field(
+        "http://localhost:8000",
+        description="URL of the OpenAI-compatible server where the model is being served",
+    )
+    proxy: Optional[str] = Field(
+        None,
+        description="Proxy URL to use when making the HTTP request",
+    )
+    model: str = Field(
+        "ggml", description="The name of the model to use (optional for the GGML class)"
+    )
 
     template_messages: Optional[
         Callable[[List[Dict[str, str]]], str]
@@ -65,6 +92,7 @@ class GGML(LLM):
                     **args,
                 },
                 headers=self.get_headers(),
+                proxy=self.proxy,
             ) as resp:
                 async for line in resp.content.iter_any():
                     if line:
@@ -98,6 +126,7 @@ class GGML(LLM):
                     f"{self.server_url}/v1/chat/completions",
                     json={"messages": messages, "stream": True, **args},
                     headers=self.get_headers(),
+                    proxy=self.proxy,
                 ) as resp:
                     async for line, end in resp.content.iter_chunks():
                         json_chunk = line.decode("utf-8")
@@ -134,6 +163,7 @@ class GGML(LLM):
                     **args,
                 },
                 headers=self.get_headers(),
+                proxy=self.proxy,
             ) as resp:
                 text = await resp.text()
                 try:

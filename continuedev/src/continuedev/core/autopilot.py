@@ -177,6 +177,7 @@ class Autopilot(ContinueBaseModel):
             session_info=self.session_info,
             config=self.continue_sdk.config,
             saved_context_groups=self._saved_context_groups,
+            context_providers=self.context_manager.get_provider_descriptions(),
         )
         self.full_state = full_state
         return full_state
@@ -250,9 +251,9 @@ class Autopilot(ContinueBaseModel):
     def handle_manual_edits(self, edits: List[FileEditWithFullContents]):
         for edit in edits:
             self._manual_edits_buffer.append(edit)
-            # TODO: You're storing a lot of unecessary data here. Can compress into EditDiffs on the spot, and merge.
+            # TODO: You're storing a lot of unnecessary data here. Can compress into EditDiffs on the spot, and merge.
             # self._manual_edits_buffer = merge_file_edit(self._manual_edits_buffer, edit)
-            # Note that this is being overriden to do nothing in DemoAgent
+            # Note that this is being overridden to do nothing in DemoAgent
 
     async def handle_command_output(self, output: str):
         get_traceback_funcs = [get_python_traceback, get_javascript_traceback]
@@ -464,6 +465,9 @@ class Autopilot(ContinueBaseModel):
 
         # Update its description
         async def update_description():
+            if self.continue_sdk.config.disable_summaries:
+                return
+
             description = await step.describe(self.continue_sdk.models)
             if description is not None:
                 step.description = description
@@ -533,11 +537,15 @@ class Autopilot(ContinueBaseModel):
                 ):
                     return
 
-                title = await self.continue_sdk.models.medium.complete(
-                    f'Give a short title to describe the current chat session. Do not put quotes around the title. The first message was: "{user_input}". Do not use more than 10 words. The title is: ',
-                    max_tokens=20,
-                )
-                title = remove_quotes_and_escapes(title)
+                if self.continue_sdk.config.disable_summaries:
+                    title = user_input
+                else:
+                    title = await self.continue_sdk.models.medium.complete(
+                        f'Give a short title to describe the current chat session. Do not put quotes around the title. The first message was: "{user_input}". Do not use more than 10 words. The title is: ',
+                        max_tokens=20,
+                    )
+                    title = remove_quotes_and_escapes(title)
+
                 self.session_info = SessionInfo(
                     title=title,
                     session_id=self.ide.session_id,

@@ -62,7 +62,9 @@ class DiffManager {
   }
 
   private escapeFilepath(filepath: string): string {
-    return filepath.replace(/\\/g, "_").replace(/\//g, "_");
+    return filepath
+      .replace(/\//g, "$forwardslash$")
+      .replace(/\\/g, "$backslash$");
   }
 
   private remoteTmpDir: string = "/tmp/continue";

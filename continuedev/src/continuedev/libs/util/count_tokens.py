@@ -18,18 +18,25 @@ DEFAULT_ARGS = {
     "temperature": 0.5,
 }
 
+already_saw_import_err = False
+
 
 def encoding_for_model(model_name: str):
+    global already_saw_import_err
+    if already_saw_import_err:
+        return None
+    
     try:
         import tiktoken
         from tiktoken_ext import openai_public  # noqa: F401
 
         try:
             return tiktoken.encoding_for_model(aliases.get(model_name, model_name))
-        except:
+        except Exception as _:
             return tiktoken.encoding_for_model("gpt-3.5-turbo")
     except Exception as e:
         print("Error importing tiktoken", e)
+        already_saw_import_err = True
         return None
 
 

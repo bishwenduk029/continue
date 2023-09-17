@@ -47,7 +47,7 @@ class FasterEditHighlightedCodeStep(Step):
         REPLACE_WITH
         <CODE_TO_REPLACE_WITH>
 
-        where <CODE_TO_REPLACE> and <CODE_TO_REPLACE_WITH> can be multiple lines, but should be the mininum needed to make the edit. Be sure to maintain existing whitespace at the start of lines.
+        where <CODE_TO_REPLACE> and <CODE_TO_REPLACE_WITH> can be multiple lines, but should be the minimum needed to make the edit. Be sure to maintain existing whitespace at the start of lines.
 
         For example, if you want to replace the code `x = 1` with `x = 2` in main.py, you would write:
         FILEPATH
@@ -235,6 +235,72 @@ class StarCoderEditHighlightedCodeStep(Step):
             await sdk.ide.setFileOpen(rif.filepath)
 
 
+def decode_escaped_path(path: str) -> str:
+    """We use a custom escaping scheme to record the full path of a file as a
+    corresponding basename, but withut URL encoding, because then the URI just gets
+    interpreted as a full path again."""
+    return path.replace("$forwardslash$", "/").replace("$backslash$", "\\")
+
+
+def encode_escaped_path(path: str) -> str:
+    """We use a custom escaping scheme to record the full path of a file as a
+    corresponding basename, but withut URL encoding, because then the URI just gets
+    interpreted as a full path again."""
+    return path.replace("/", "$forwardslash$").replace("\\", "$backslash$")
+
+
+class EditAlreadyEditedRangeStep(Step):
+    hide = True
+    model: Optional[LLM] = None
+    range_in_file: RangeInFile
+
+    user_input: str
+
+    _prompt = dedent(
+        """\
+                    You were previously asked to edit this code. The request was:
+
+                    "{prev_user_input}"
+                    
+                    And you generated this diff:
+
+                    {diff}
+                    
+                    Could you please re-edit this code to follow these secondary instructions?
+
+                    "{user_input}"
+                    """
+    )
+
+    async def run(self, sdk: ContinueSDK) -> Coroutine[Observation, None, None]:
+        if os.path.basename(self.range_in_file.filepath) in os.listdir(
+            os.path.expanduser(os.path.join("~", ".continue", "diffs"))
+        ):
+            decoded_basename = decode_escaped_path(
+                os.path.basename(self.range_in_file.filepath)
+            )
+            self.range_in_file.filepath = decoded_basename
+
+        self.range_in_file.range = sdk.context.get("last_edit_range")
+
+        if self.range_in_file.range.start == self.range_in_file.range.end:
+            self.range_in_file.range = Range.from_entire_file(
+                await sdk.ide.readFile(self.range_in_file.filepath)
+            )
+
+        await sdk.run_step(
+            DefaultModelEditCodeStep(
+                model=self.model,
+                user_input=self._prompt.format(
+                    prev_user_input=sdk.context.get("last_edit_user_input"),
+                    diff=sdk.context.get("last_edit_diff"),
+                    user_input=self.user_input,
+                ),
+                range_in_files=[self.range_in_file],
+            )
+        )
+
+
 class EditHighlightedCodeStep(Step):
     user_input: str = Field(
         ...,
@@ -258,13 +324,6 @@ class EditHighlightedCodeStep(Step):
             highlighted_code = await sdk.ide.getHighlightedCode()
             if highlighted_code is not None:
                 for rif in highlighted_code:
-                    if os.path.dirname(rif.filepath) == os.path.expanduser(
-                        os.path.join("~", ".continue", "diffs")
-                    ):
-                        raise ContinueCustomException(
-                            message="Please accept or reject the change before making another edit in this file.",
-                            title="Accept/Reject First",
-                        )
                     if rif.range.start == rif.range.end:
                         range_in_files.append(
                             RangeInFileWithContents.from_range_in_file(rif, "")
@@ -289,10 +348,22 @@ class EditHighlightedCodeStep(Step):
         )
 
         for range_in_file in range_in_files:
-            if os.path.dirname(range_in_file.filepath) == os.path.expanduser(
-                os.path.join("~", ".continue", "diffs")
-            ):
-                self.description = "Please accept or reject the change before making another edit in this file."
+            # Check whether re-editing
+            if (
+                os.path.dirname(range_in_file.filepath)
+                == os.path.expanduser(os.path.join("~", ".continue", "diffs"))
+                or encode_escaped_path(range_in_file.filepath)
+                in os.listdir(
+                    os.path.expanduser(os.path.join("~", ".continue", "diffs"))
+                )
+            ) and sdk.context.get("last_edit_user_input") is not None:
+                await sdk.run_step(
+                    EditAlreadyEditedRangeStep(
+                        range_in_file=range_in_file,
+                        user_input=self.user_input,
+                        model=self.model,
+                    )
+                )
                 return
 
         args = {

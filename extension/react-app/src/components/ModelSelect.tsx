@@ -63,8 +63,15 @@ const MODEL_INFO: { title: string; class: string; args: any }[] = [
     title: "HuggingFace Inference API",
     class: "HuggingFaceInferenceAPI",
     args: {
-      endpoint_url: "<INFERENCE_API_ENDPOINT_URL>", 
+      endpoint_url: "<INFERENCE_API_ENDPOINT_URL>",
       hf_token: "<HUGGING_FACE_TOKEN>",
+    },
+  },
+  {
+    title: "LM Studio",
+    class: "GGML",
+    args: {
+      server_url: "http://localhost:1234",
     },
   },
   {
